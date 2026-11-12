@@ -1,0 +1,31 @@
+rules:
+  # This rule is deliberately narrow and anchored to the SQL interpolation
+  # pattern observed in the current upstream Juice Shop routes/login.ts and
+  # routes/search.ts. Semgrep severity ERROR is the demo's High gate.
+  - id: acme-sequelize-template-sql
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      SQL query includes a template-string interpolation. Verify whether the
+      value can come from an HTTP request; prefer parameterised SQL queries.
+    metadata:
+      category: security
+      cwe: 'CWE-89: SQL Injection'
+      confidence: HIGH
+      impact: HIGH
+    pattern-regex: 'sequelize\.query\s*\(\s*`[^`]*\$\{[^}]+\}[^`]*`'
+
+  # A targeted rule for hard-coded auth comparisons such as the deliberately
+  # vulnerable req.body.password === 'admin123' example in routes/login.ts.
+  - id: acme-hardcoded-password-comparison
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Password request field is compared with a hard-coded string. Use a
+      proper verifier with stored password hashes; do not embed passwords.
+    metadata:
+      category: security
+      cwe: 'CWE-798: Use of Hard-coded Credentials'
+      confidence: HIGH
+      impact: HIGH
+    pattern-regex: 'req\.body\.password\s*===\s*["''][^"'']{4,}["'']'
