@@ -1,0 +1,12 @@
+title = 'Acme FinTech — base secret rules + deterministic fake-key test'
+
+[extend]
+useDefault = true
+
+# This rule guarantees a clearly fake AWS-key-shaped string is caught in the
+# demo PR, even if upstream heuristic rules require entropy/context.
+[[rules]]
+id = 'acme-demo-aws-key-shape'
+description = 'Demonstration AWS-access-key-shaped marker (FAKE ONLY)'
+regex = '''AKIA[0-9A-Z]{16}'''
+keywords = ['AKIA']
