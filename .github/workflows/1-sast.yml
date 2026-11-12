@@ -37,9 +37,7 @@ jobs:
 
       - name: Test custom rules
         run: |
-          semgrep --test \
-            --config .semgrep/rules/custom.yml \
-            .semgrep/tests
+          semgrep --test .semgrep/rules/
 
       - name: Scan Juice Shop
         run: |
@@ -48,8 +46,9 @@ jobs:
             --config .semgrep/rules/custom.yml \
             --severity ERROR \
             --error \
-            --json \
-            --output reports/semgrep.json \
+            --metrics=off \
+            --text \
+            --json-output reports/semgrep.json \
             routes/
 
       - name: Upload scan results
