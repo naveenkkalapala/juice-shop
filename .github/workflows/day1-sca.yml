@@ -1,0 +1,116 @@
+
+name: Day 1 - SCA and SBOM
+
+on:
+  push:
+    branches:
+      - 'assessment/**'
+  pull_request:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sca:
+    name: sca-trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      TRIVY_VERSION: '0.76.2'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Trivy
+        run: |
+          mkdir -p "$RUNNER_TEMP/trivy-bin"
+          cd "$RUNNER_TEMP/trivy-bin"
+
+          BASE_URL="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          ARCHIVE="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          CHECKSUMS="trivy_${TRIVY_VERSION}_checksums.txt"
+
+          curl -fsSLO "$BASE_URL/$ARCHIVE"
+          curl -fsSLO "$BASE_URL/$CHECKSUMS"
+
+          echo "802e4ac1418ed967cd3c4b901f4f71ca00b7363ede67778665a22d9f13f58c83  $CHECKSUMS" | sha256sum -c -
+
+          grep " $ARCHIVE\$" "$CHECKSUMS" | sha256sum -c -
+
+          tar -xzf "$ARCHIVE" trivy
+
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
+
+      - name: Verify Trivy installation
+        run: trivy --version
+
+      - name: Prepare reports directory
+        run: mkdir -p "$RUNNER_TEMP/security-reports"
+
+      - name: Generate dependency SBOM
+        run: |
+          trivy fs \
+            --include-dev-deps \
+            --format cyclonedx \
+            --output "$RUNNER_TEMP/security-reports/sbom.cdx.json" \
+            .
+
+          jq -e '(.components | length) > 0' \
+            "$RUNNER_TEMP/security-reports/sbom.cdx.json"
+
+      - name: Scan dependencies for vulnerabilities
+        run: |
+          trivy fs \
+            --scanners vuln \
+            --include-dev-deps \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --format json \
+            --output "$RUNNER_TEMP/security-reports/trivy-sca.json" \
+            .
+
+      - name: Display vulnerability summary
+        if: always()
+        run: |
+          REPORT="$RUNNER_TEMP/security-reports/trivy-sca.json"
+
+          if [ -s "$REPORT" ]; then
+            echo "Dependency vulnerability summary"
+
+            jq -r '
+              (.Results // [])[]
+              | (.Vulnerabilities // [])[]
+              | [
+                  .VulnerabilityID,
+                  .PkgName,
+                  .InstalledVersion,
+                  .Severity,
+                  (.FixedVersion // "Not available")
+                ]
+              | @tsv
+            ' "$REPORT"
+
+            echo "Total High/Critical findings:"
+
+            jq '[.Results[]?.Vulnerabilities[]?] | length' \
+              "$REPORT"
+          else
+            echo "No vulnerability report generated"
+          fi
+
+      - name: Upload SCA and SBOM reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-and-sbom-reports
+          path: ${{ runner.temp }}/security-reports/
+          if-no-files-found: error
+          retention-days: 14
